@@ -16,9 +16,9 @@ ERROR_COUNT = Counter(
     "http_errors_total", "Total HTTP error responses", ["method", "endpoint", "status"]
 )
 
-DYNAMODB_REGION = os.getenv("AWS_REGION", "us-east-1")
-DYNAMODB_ENDPOINT = os.getenv("DYNAMODB_ENDPOINT_URL")
-DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "Users")
+DYNAMODB_REGION = os.getenv("AWS_REGION", "eu-west-1")
+DYNAMODB_ENDPOINT = os.getenv("DYNAMODB_ENDPOINT", "https://dynamodb.eu-west-1.amazonaws.com")
+DYNAMODB_TABLE = os.getenv("DYNAMODB_TABLE", "users")
 
 dynamodb = boto3.resource(
     "dynamodb", region_name=DYNAMODB_REGION, endpoint_url=DYNAMODB_ENDPOINT

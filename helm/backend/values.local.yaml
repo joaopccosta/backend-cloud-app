@@ -1,0 +1,29 @@
+replicaCount: 1
+
+image:
+  repository: backend-cloud-app
+  name: backend-cloud-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: NodePort
+
+ingress:
+  enabled: true
+  className: nginx
+  host: backend.local
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+
+environment: local
+
+dynamodb:
+  endpoint: http://dynamodb-local:8000
+  table: users
+  region: eu-west-1
+aws:
+  accountId: 123456789
+  irsa:
+    enabled: false
+    roleName: "fake-role"

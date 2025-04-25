@@ -1,0 +1,28 @@
+replicaCount: 1
+
+image:
+  repository: 416761359656.dkr.ecr.eu-west-1.amazonaws.com/backend-cloud-app
+  name: backend-cloud-app
+  tag: latest
+  pullPolicy: Always
+
+service:
+  type: LoadBalancer
+
+ingress:
+  enabled: false 
+  className: ""
+  host: ""
+  annotations: {}
+
+environment: ""
+
+dynamodb:
+  endpoint: https://dynamodb.eu-west-1.amazonaws.com
+  table: users
+
+aws:
+  accountId: 416761359656
+  irsa:
+    enabled: true
+    roleName: dev-backend-irsa-role
