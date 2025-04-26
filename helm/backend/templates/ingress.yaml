@@ -7,8 +7,15 @@ metadata:
     {{- range $key, $value := .Values.ingress.annotations }}
     {{ $key }}: {{ $value | quote }}
     {{- end }}
+    {{- if .Values.ingress.acmCertificateArn }}
+    alb.ingress.kubernetes.io/certificate-arn: {{ .Values.ingress.acmCertificateArn | quote }}
+    {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: my-temporary-secret
   rules:
     - host: {{ .Values.ingress.host }}
       http:

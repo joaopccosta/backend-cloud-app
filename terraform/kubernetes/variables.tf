@@ -8,12 +8,8 @@ variable "aws_username" {
     description = "AWS username managing EKS"
 }
 
-variable "eks_node_role_arn" {
-  type = string
-  description = "The IAM role ARN for the EKS worker nodes"
+variable "acm_domain_name" {
+  description = "The domain name for the ACM certificate"
+  type        = string
 }
 
-variable "backend_irsa_role_arn" {
-  type        = string
-  description = "Backend IRSA role ARN for Kubernetes ServiceAccount"
-}

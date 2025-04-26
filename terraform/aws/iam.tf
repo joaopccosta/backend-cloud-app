@@ -1,5 +1,5 @@
 resource "aws_iam_role" "eks_cluster_role" {
-  name = "eks-cluster-role"
+  name = "${var.environment}-eks-cluster-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
@@ -13,7 +13,7 @@ resource "aws_iam_role" "eks_cluster_role" {
   })
 
   tags = {
-    Name = "eks-cluster-role"
+    Name = "${var.environment}-eks-cluster-role"
   }
 }
 
@@ -56,7 +56,7 @@ resource "aws_iam_role_policy_attachment" "ecr_readonly_policy" {
   role       = aws_iam_role.eks_node_group_role.name
 }
 
-resource "aws_iam_openid_connect_provider" "oidc" {
+resource "aws_iam_openid_connect_provider" "sts" {
   client_id_list = ["sts.amazonaws.com"]
   thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0ecd3e5e0"]
   url = aws_eks_cluster.main.identity[0].oidc[0].issuer
@@ -64,12 +64,8 @@ resource "aws_iam_openid_connect_provider" "oidc" {
   depends_on = [aws_eks_cluster.main]
 }
 
-resource "aws_iam_openid_connect_provider" "github" {
+data "aws_iam_openid_connect_provider" "github" {
   url = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
-
-  depends_on = [aws_eks_cluster.main]
 }
 
 resource "aws_iam_role" "github_actions" {
@@ -80,7 +76,7 @@ resource "aws_iam_role" "github_actions" {
     Statement = [{
       Effect = "Allow",
       Principal = {
-        Federated = aws_iam_openid_connect_provider.github.arn
+        Federated = data.aws_iam_openid_connect_provider.github.arn
       },
       Action = "sts:AssumeRoleWithWebIdentity",
       Condition = {
@@ -109,7 +105,7 @@ resource "aws_iam_role" "backend_irsa" {
     Statement = [{
       Effect = "Allow",
       Principal = {
-        Federated = aws_iam_openid_connect_provider.oidc.arn
+        Federated = aws_iam_openid_connect_provider.sts.arn
       },
       Action = "sts:AssumeRoleWithWebIdentity",
       Condition = {
@@ -146,4 +142,66 @@ resource "aws_iam_policy" "dynamodb_backend_access" {
 resource "aws_iam_role_policy_attachment" "backend_dynamodb_attach" {
   policy_arn = aws_iam_policy.dynamodb_backend_access.arn
   role       = aws_iam_role.backend_irsa.name
+}
+
+resource "aws_iam_role" "aws_load_balancer_controller" {
+  name = "${var.environment}-aws-load-balancer-controller-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Federated = aws_iam_openid_connect_provider.sts.arn
+      },
+      Action = "sts:AssumeRoleWithWebIdentity",
+      Condition = {
+        StringEquals = {
+          "${replace(data.aws_eks_cluster.main.identity[0].oidc[0].issuer, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller-sa"
+        }
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller_attach" {
+  role       = aws_iam_role.aws_load_balancer_controller.name
+  policy_arn = "arn:aws:iam::aws:policy/ElasticLoadBalancingFullAccess"
+}
+
+resource "aws_iam_policy" "alb_controller_extra_permissions" {
+  name = "${var.environment}-alb-controller-extra-permissions"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "ec2:DescribeSubnets",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeVpcs",
+          "ec2:CreateSecurityGroup",
+          "ec2:AuthorizeSecurityGroupIngress",
+          "ec2:RevokeSecurityGroupIngress",
+          "ec2:DeleteSecurityGroup",
+          "ec2:DescribeAvailabilityZones",
+          "ec2:CreateTags",
+          "wafv2:GetWebACLForResource",
+          "waf-regional:GetWebACLForResource",
+          "acm:ListCertificates",
+          "acm:DescribeCertificate",
+          "acm:GetCertificate",
+          "acm:ListCertificates",
+          "acm:ListTagsForCertificate"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "alb_controller_extra_permissions_attach" {
+  role       = aws_iam_role.aws_load_balancer_controller.name
+  policy_arn = aws_iam_policy.alb_controller_extra_permissions.arn
 }

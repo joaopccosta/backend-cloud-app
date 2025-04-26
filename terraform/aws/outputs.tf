@@ -23,6 +23,11 @@ output "cluster_endpoint" {
   value       = aws_eks_cluster.main.endpoint
 }
 
+output "cluster_arn" {
+  description = "The ARN for the EKS cluster"
+  value       = aws_eks_cluster.main.arn
+}
+
 output "oidc_issuer_url" {
   description = "The OIDC issuer URL for IRSA"
   value       = aws_eks_cluster.main.identity[0].oidc[0].issuer
@@ -51,5 +56,11 @@ output "eks_node_role_arn" {
 output "backend_irsa_role_arn" {
   description = "The IAM role ARN assumed by the backend service account via IRSA"
   value       = aws_iam_role.backend_irsa.arn
+  sensitive   = true
+}
+
+output "alb_controller_irsa_role_arn" {
+  description = "The IAM role ARN assumed by the AWS Load Balancer Controller service account via IRSA"
+  value       = aws_iam_role.aws_load_balancer_controller.arn
   sensitive   = true
 }

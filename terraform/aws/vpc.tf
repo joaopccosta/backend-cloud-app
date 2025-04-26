@@ -37,6 +37,8 @@ resource "aws_subnet" "public_a" {
 
   tags = {
     Name = "${var.environment}-public-subnet"
+    "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "shared"
+    "kubernetes.io/role/elb" = "1"
   }
 }
 
@@ -58,6 +60,8 @@ resource "aws_subnet" "public_b" {
 
   tags = {
     Name = "${var.environment}-public-subnet-b"
+    "kubernetes.io/cluster/${aws_eks_cluster.main.name}" = "shared"
+    "kubernetes.io/role/elb" = "1"
   }
 }
 

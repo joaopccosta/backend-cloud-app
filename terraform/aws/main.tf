@@ -9,7 +9,7 @@ terraform {
 
   backend "s3" {
     bucket         = "backend-cloud-app-state-bucket"
-    key            = "env/dev/terraform.tfstate"
+    key            = "env/aws.tfstate"
     region         = "eu-west-1"
     use_lockfile = true
     encrypt        = true

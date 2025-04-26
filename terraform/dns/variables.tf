@@ -3,17 +3,6 @@ variable "environment" {
     description = "Target environment"
 }
 
-variable "backend_port" {
-    type = number
-    default = 8080
-    description = "The port on which the backend is listening to traffic"
-}
-variable "dynamodb_users_table_name" {
-    type = string
-    description = "Name of the dynamodb table for mapping usernames to birth dates"
-    default = "users"
-}
-
 variable "acm_domain_name" {
   description = "The domain name for the ACM certificate"
   type        = string
@@ -22,4 +11,16 @@ variable "acm_domain_name" {
 variable "route53_zone_id" {
   description = "The Route53 Hosted Zone ID for domain validation"
   type        = string
+}
+
+variable "backend_alb_dns_name" {
+  description = "DNS name of the backend ALB"
+  type        = string
+  default = ""
+}
+
+variable "backend_alb_zone_id" {
+  description = "Zone ID of the backend ALB"
+  type        = string
+  default = ""
 }

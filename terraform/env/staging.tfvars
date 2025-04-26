@@ -1,3 +1,4 @@
 environment="staging"
-backend_irsa_role_arn = "arn:aws:iam::416761359656:role/staging-backend-irsa-role"
-eks_node_role_arn = "arn:aws:iam::416761359656:role/dev-eks-node-group-role"
+dynamodb_users_table_name = "staging-users"
+acm_domain_name = "staging-api.joaocosta.net"
+route53_zone_id = "Z1UMZ9ZYMZGG6E"
