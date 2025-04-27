@@ -1,6 +1,4 @@
-
-
-name: Kubernetes Init and Plan
+name: Kubernetes Terraform - Init and Plan
 
 on:
   workflow_dispatch:

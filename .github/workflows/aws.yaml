@@ -1,4 +1,4 @@
-name: Terraform AWS (Init and Plan)
+name: AWS Terraform - Init and Plan
 
 on:
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
     container:
       image: hashicorp/terraform:1.11.4
     env:
-      ENV: ${{ inputs.ENV }}
+      ENV: ${{ inputs.environment }}
       AWS_REGION: eu-west-1
       AWS_ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
     steps:
@@ -35,7 +35,6 @@ jobs:
       - name: Terraform Plan AWS
         working-directory: terraform/aws
         run: |
-          cd terraform/aws
           terraform init -reconfigure
           terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
           terraform plan -var-file=../env/${{ env.ENV }}.tfvars -out=plan.out

@@ -1,0 +1,42 @@
+name: apply-aws
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy (e.g., dev, staging, prod)'
+        required: true
+        type: string
+
+jobs:
+  apply-aws:
+    name: Apply Terraform AWS
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Terraform plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aws-plan-${{ inputs.environment }}
+          path: terraform/aws/
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+          aws-region: eu-west-1
+
+      - name: Terraform Apply
+        working-directory: terraform/aws
+        run: |
+          terraform init -reconfigure
+          terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
+          terraform apply "plan.out"

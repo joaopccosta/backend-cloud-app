@@ -1,6 +1,4 @@
-
-
-name: DNS Terraform
+name: DNS Terraform - Init and Plan
 
 on:
   workflow_dispatch:
