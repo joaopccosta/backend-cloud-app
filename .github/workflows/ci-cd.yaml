@@ -1,0 +1,170 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Upload code as artifact
+        uses: ./.github/actions/upload-code-artifact
+        with:
+          artifact-name: repo
+
+  test:
+    needs: setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+        with:
+          artifact-name: repo
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip jq awscli kubectl
+          pip3 install -r requirements.txt
+
+      - name: Run tests
+        run: make setup_python test
+
+  build_and_push_image:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+        with:
+          artifact-name: repo
+      
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli
+
+      - name: Install Docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: make build
+
+      - name: Login to AWS ECR
+        run: |
+          aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Push Docker image
+        run: make push
+
+  plan-aws:
+    needs: build_and_push_image
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+        with:
+          artifact-name: repo
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.11.4
+
+      - name: Terraform Plan AWS
+        run: make init-aws plan-aws
+
+      - uses: ./.github/actions/upload-code-artifact
+        with:
+          artifact-name: terraform-plan
+
+  apply-aws:
+    needs: plan-aws
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+        with:
+          artifact-name: terraform-plan
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.11.4
+
+      - name: Terraform Apply AWS
+        run: make apply-aws
+
+  plan-kubernetes:
+    needs: apply-aws
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq awscli kubectl
+          pip3 install -r requirements.txt
+
+      - name: Terraform Plan Kubernetes
+        run: make init-kubernetes plan-kubernetes
+
+  apply-kubernetes:
+    needs: plan-kubernetes
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq awscli kubectl
+          pip3 install -r requirements.txt
+
+      - name: Terraform Apply Kubernetes
+        run: make apply-kubernetes
+
+  plan-dns:
+    needs: apply-kubernetes
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq awscli kubectl
+          pip3 install -r requirements.txt
+
+      - name: Terraform Plan DNS
+        run: make init-dns plan-dns
+
+  apply-dns:
+    needs: plan-dns
+    runs-on: ubuntu-latest
+    environment: dev
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: ./.github/actions/download-code-artifact
+
+      - name: Install requirements
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq awscli kubectl
+          pip3 install -r requirements.txt
+
+      - name: Terraform Apply DNS
+        run: make apply-dns
