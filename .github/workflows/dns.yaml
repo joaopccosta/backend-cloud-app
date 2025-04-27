@@ -1,0 +1,59 @@
+
+
+name: DNS Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      ENV:
+        description: "Environment to deploy (dev, staging, prod)"
+        required: true
+        default: "dev"
+
+jobs:
+  init_plan_dns:
+    name: Init and Plan DNS
+    runs-on: ubuntu-latest
+    env:
+      ENV: ${{ inputs.environment }}
+      AWS_REGION: eu-west-1
+      AWS_ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.11.4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+          aws-region: eu-west-1
+
+      - name: Set up kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Install AWS CLI and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y awscli jq
+
+      - name: Terraform Plan AWS
+        working-directory: terraform/dns
+        run: |
+          BACKEND_ALB_DNS_NAME=$(kubectl get ingress backend -n ${{ env.ENV }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'))
+          BACKEND_ALB_ZONE_ID=$(aws elbv2 describe-load-balancers --region ${{ env.AWS_REGION }} --output json | jq -r --arg dns_name "$(BACKEND_ALB_DNS_NAME)" '.LoadBalancers[] | select(.DNSName == $$dns_name) | .CanonicalHostedZoneId'))
+          terraform init -reconfigure
+          terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
+          terraform plan -var-file=../env/${{ env.ENV }}.tfvars -var aws_username=${{ secrets.AWS_USERNAME }}-out=plan.out
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-plan-artifact
+          path: terraform/aws/plan.out
