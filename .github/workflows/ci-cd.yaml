@@ -9,162 +9,60 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
+env:
+    VERSION: ${{ github.ref_type == 'tag' && github.ref_name || format('1.0.{0}', github.run_number) }}
+    IMAGE_NAME: backend-cloud-app
+
 jobs:
-  setup:
+  test:
     runs-on: ubuntu-latest
+    container:
+      image: python:3.11
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Upload code as artifact
-        uses: ./.github/actions/upload-code-artifact
-        with:
-          artifact-name: repo
-
-  test:
-    needs: setup
-    runs-on: ubuntu-latest
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-        with:
-          artifact-name: repo
-
-      - name: Install requirements
+      - name: Setup Backend and Run tests
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-pip jq awscli kubectl
-          pip3 install -r requirements.txt
-
-      - name: Run tests
-        run: make setup_python test
+          cd app
+          python -m venv venv && . venv/bin/activate && pip install -r requirements.txt && pytest -s -v
 
   build_and_push_image:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: ./.github/actions/download-code-artifact
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v3
         with:
-          artifact-name: repo
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+          aws-region: eu-west-1
       
       - name: Install requirements
         run: |
           sudo apt-get update
-          sudo apt-get install -y awscli
+          sudo apt-get install -y python3-pip
+          pip3 install awscli
 
       - name: Install Docker buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker image
-        run: make build
-
-      - name: Login to AWS ECR
         run: |
-          aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          cd app
+          docker buildx build --platform=linux/arm64 --load -t ${{ env.IMAGE_NAME }}:latest -t ${{ env.IMAGE_NAME }}:$VERSION .
+          docker tag ${{ env.IMAGE_NAME }}:latest ${{ secrets.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker tag ${{ env.IMAGE_NAME }}:$VERSION ${{ secrets.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION
 
       - name: Push Docker image
-        run: make push
-
-  plan-aws:
-    needs: build_and_push_image
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-        with:
-          artifact-name: repo
-
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.11.4
-
-      - name: Terraform Plan AWS
-        run: make init-aws plan-aws
-
-      - uses: ./.github/actions/upload-code-artifact
-        with:
-          artifact-name: terraform-plan
-
-  apply-aws:
-    needs: plan-aws
-    runs-on: ubuntu-latest
-    environment: dev
-    if: github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-        with:
-          artifact-name: terraform-plan
-
-      - name: Install Terraform
-        uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.11.4
-
-      - name: Terraform Apply AWS
-        run: make apply-aws
-
-  plan-kubernetes:
-    needs: apply-aws
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-
-      - name: Install requirements
         run: |
-          sudo apt-get update
-          sudo apt-get install -y jq awscli kubectl
-          pip3 install -r requirements.txt
-
-      - name: Terraform Plan Kubernetes
-        run: make init-kubernetes plan-kubernetes
-
-  apply-kubernetes:
-    needs: plan-kubernetes
-    runs-on: ubuntu-latest
-    environment: dev
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq awscli kubectl
-          pip3 install -r requirements.txt
-
-      - name: Terraform Apply Kubernetes
-        run: make apply-kubernetes
-
-  plan-dns:
-    needs: apply-kubernetes
-    runs-on: ubuntu-latest
-    environment: dev
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq awscli kubectl
-          pip3 install -r requirements.txt
-
-      - name: Terraform Plan DNS
-        run: make init-dns plan-dns
-
-  apply-dns:
-    needs: plan-dns
-    runs-on: ubuntu-latest
-    environment: dev
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: ./.github/actions/download-code-artifact
-
-      - name: Install requirements
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq awscli kubectl
-          pip3 install -r requirements.txt
-
-      - name: Terraform Apply DNS
-        run: make apply-dns
+          cd app
+          aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+          docker push ${{ secrets.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}:$VERSION

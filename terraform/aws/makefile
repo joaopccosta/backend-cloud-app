@@ -14,9 +14,6 @@ plan:
 apply:
 	terraform workspace select $(ENV)
 	terraform apply -var-file=../env/$(ENV).tfvars plan.out
-	@echo "Run the following to export environment variables:"
-	@echo "export DYNAMODB_ENDPOINT=$$(terraform output -raw dynamodb_endpoint)"
-	@echo "export DYNAMODB_TABLE=$$(terraform output -raw dynamodb_table)"
 	@echo "Refreshing kubeconfig for AWS EKS cluster..."
 	aws eks update-kubeconfig --region $(AWS_REGION) --name $(ENV)-eks-cluster
 

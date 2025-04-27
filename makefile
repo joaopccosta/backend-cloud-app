@@ -3,10 +3,13 @@ IMAGE_NAME ?= backend-cloud-app
 VERSION ?=1.0.0
 AWS_USERNAME ?= some-username
 
-.PHONY: test build push build-local clean init-aws plan-aws apply-aws init-kubernetes plan-kubernetes apply-kubernetes init-dns plan-dns apply-dns destroy minikube-up minikube-down helm-dependency-update helm-deploy-local helm-deploy-env
+.PHONY: setup_python test build push build-local clean init-aws plan-aws apply-aws init-kubernetes plan-kubernetes apply-kubernetes init-dns plan-dns apply-dns destroy minikube-up minikube-down helm-dependency-update helm-deploy-local helm-deploy-env
+
+setup_python:
+	make -C app setup_python VERSION=$(VERSION)
 
 test:
-	make -C app setup_python test VERSION=$(VERSION)
+	make -C app test VERSION=$(VERSION)
 
 build:
 	make -C app setup_python test build VERSION=$(VERSION)
