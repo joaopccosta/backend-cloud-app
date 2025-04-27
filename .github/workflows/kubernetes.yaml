@@ -1,0 +1,57 @@
+name: 2 - Kubernetes Terraform - Init and Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy (e.g., dev, staging, prod)"
+        required: true
+        default: "dev"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  init_plan_kubernetes:
+    name: Init and Plan
+    runs-on: ubuntu-latest
+    container:
+      image: hashicorp/terraform:1.11.4
+    env:
+      ENV: ${{ inputs.environment }}
+      AWS_REGION: eu-west-1
+      AWS_ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install tools
+        run: |
+          apk add --no-cache curl
+          apk add --no-cache aws-cli
+          apk add --no-cache jq
+
+      - name: Set up kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.ENV }}-eks-cluster
+
+      - name: Terraform Plan
+        working-directory: terraform/kubernetes
+        run: |
+          terraform init -reconfigure
+          terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
+          terraform plan -var-file=../env/${{ env.ENV }}.tfvars -var aws_username=${{ secrets.AWS_USERNAME }} -out=plan.out

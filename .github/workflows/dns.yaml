@@ -1,0 +1,71 @@
+name: 3 - DNS Terraform - Init and Plan
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy (dev, staging, prod)"
+        required: true
+        default: "dev"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  init_plan_dns:
+    name: Init and Plan
+    runs-on: ubuntu-latest
+    container:
+      image: hashicorp/terraform:1.11.4
+    env:
+      ENV: ${{ inputs.environment }}
+      AWS_REGION: eu-west-1
+      AWS_ROLE_TO_ASSUME: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github_actions
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install tools
+        run: |
+          apk add --no-cache curl
+          apk add --no-cache aws-cli
+          apk add --no-cache jq
+
+      - name: Set up kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region ${{ env.AWS_REGION }} \
+            --name ${{ env.ENV }}-eks-cluster
+
+      - name: Set ALB DNS Name
+        working-directory: terraform/dns
+        run: |
+          echo "BACKEND_ALB_DNS_NAME=$(kubectl get ingress backend -n ${{ env.ENV }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')" >> $GITHUB_ENV
+       
+      - name: Set ALB DNS Name
+        working-directory: terraform/dns
+        run: |
+          echo "BACKEND_ALB_ZONE_ID=$(aws elbv2 describe-load-balancers --region ${{ env.AWS_REGION }} --output json | jq -r --arg dns_name "$BACKEND_ALB_DNS_NAME" '.LoadBalancers[] | select(.DNSName == $dns_name) | .CanonicalHostedZoneId')"  >> $GITHUB_ENV
+      
+      - name: Terraform Plan
+        working-directory: terraform/dns
+        run: |
+          terraform init -reconfigure
+          terraform workspace select ${{ env.ENV }} || terraform workspace new ${{ env.ENV }}
+          terraform plan \
+          -var-file=../env/${{ env.ENV }}.tfvars \
+          -var "backend_alb_dns_name=${{ env.BACKEND_ALB_DNS_NAME }}" \
+          -var "backend_alb_zone_id=${{ env.BACKEND_ALB_ZONE_ID }}" \
+          -out=plan.out
